@@ -222,20 +222,20 @@ rust_bindgen = rule(
 )
 
 def _rust_bindgen_toolchain_impl(ctx):
-    return platform_common.ToolchainInfo(
+    return [platform_common.ToolchainInfo(
         bindgen = ctx.executable.bindgen,
         clang = ctx.executable.clang,
         libclang = ctx.attr.libclang,
         libstdcxx = ctx.attr.libstdcxx,
         rustfmt = ctx.executable.rustfmt,
-    )
+    )]
 
 rust_bindgen_toolchain = rule(
     _rust_bindgen_toolchain_impl,
     doc = """\
 The tools required for the `rust_bindgen` rule.
 
-This rule depends on the [`bindgen`](https://crates.io/crates/bindgen) binary crate, and it 
+This rule depends on the [`bindgen`](https://crates.io/crates/bindgen) binary crate, and it
 in turn depends on both a clang binary and the clang library. To obtain these dependencies,
 `rust_bindgen_dependencies` imports bindgen and its dependencies.
 

@@ -85,8 +85,6 @@ def _current_rust_toolchain_impl(ctx):
     toolchain = ctx.toolchains[str(Label("@rules_rust//rust:toolchain"))]
 
     return [
-        toolchain,
-        toolchain.make_variables,
         DefaultInfo(
             files = depset([
                 toolchain.rustc,
@@ -95,6 +93,8 @@ def _current_rust_toolchain_impl(ctx):
                 toolchain.cargo,
             ]),
         ),
+        toolchain,
+        toolchain.make_variables,
     ]
 
 current_rust_toolchain = rule(
@@ -102,6 +102,11 @@ current_rust_toolchain = rule(
     implementation = _current_rust_toolchain_impl,
     toolchains = [
         str(Label("@rules_rust//rust:toolchain")),
+    ],
+    provides = [
+        DefaultInfo,
+        platform_common.ToolchainInfo,
+        platform_common.TemplateVariableInfo,
     ],
     incompatible_use_toolchain_transition = True,
 )

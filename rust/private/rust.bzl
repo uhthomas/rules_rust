@@ -586,7 +586,7 @@ _common_attrs = {
             The order that these files will be processed is unspecified, so
             multiple definitions of a particular variable are discouraged.
 
-            Note that the variables here are subject to 
+            Note that the variables here are subject to
             [workspace status](https://docs.bazel.build/versions/main/user-manual.html#workspace_status)
             stamping should the `stamp` attribute be enabled. Stamp variables
             should be wrapped in brackets in order to be resolved. E.g.
@@ -599,7 +599,7 @@ _common_attrs = {
             List of compiler flags passed to `rustc`.
 
             These strings are subject to Make variable expansion for predefined
-            source/output path variables like `$location`, `$execpath`, and 
+            source/output path variables like `$location`, `$execpath`, and
             `$rootpath`. This expansion is useful if you wish to pass a generated
             file of arguments to rustc: `@$(location //package:target)`.
         """),
@@ -694,7 +694,7 @@ _rust_test_attrs = {
         mandatory = False,
         default = True,
         doc = dedent("""\
-            Whether to use `libtest`. For targets using this flag, individual tests can be run by using the 
+            Whether to use `libtest`. For targets using this flag, individual tests can be run by using the
             [--test_arg](https://docs.bazel.build/versions/4.0.0/command-line-reference.html#flag--test_arg) flag.
             E.g. `bazel test //src:rust_test --test_arg=foo::test::test_fn`.
         """),

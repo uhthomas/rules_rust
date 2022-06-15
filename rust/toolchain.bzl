@@ -518,7 +518,7 @@ def _rust_toolchain_impl(ctx):
         _rename_first_party_crates = rename_first_party_crates,
         _third_party_dir = third_party_dir,
     )
-    return [toolchain]
+    return [toolchain, toolchain.make_variables]
 
 rust_toolchain = rule(
     implementation = _rust_toolchain_impl,
@@ -648,8 +648,10 @@ rust_toolchain = rule(
             default = "@rules_rust//rust/settings:third_party_dir",
         ),
     },
-    toolchains = [
-        "@bazel_tools//tools/cpp:toolchain_type",
+    toolchains = ["@bazel_tools//tools/cpp:toolchain_type"],
+    provides = [
+        platform_common.ToolchainInfo,
+        platform_common.TemplateVariableInfo,
     ],
     incompatible_use_toolchain_transition = True,
     doc = """Declares a Rust toolchain for use.
