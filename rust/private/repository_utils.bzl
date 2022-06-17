@@ -348,15 +348,11 @@ def load_rust_src(ctx):
 
     tool_path = produce_tool_path("rust-src", None, ctx.attr.version)
     archive_path = tool_path + _get_tool_extension(ctx)
-    ctx.download(
+    ctx.download_and_extract(
         url,
-        output = archive_path,
+        output = "lib/rustlib/src",
         sha256 = ctx.attr.sha256s.get(archive_path) or FILE_KEY_TO_SHA.get(archive_path) or "",
         auth = _make_auth_dict(ctx, [url]),
-    )
-    ctx.extract(
-        archive_path,
-        output = "lib/rustlib/src",
         stripPrefix = "{}/rust-src/lib/rustlib/src/rust".format(tool_path),
     )
     ctx.file(
@@ -554,18 +550,13 @@ def load_arbitrary_tool(ctx, tool_name, tool_subdirectories, version, iso_date, 
     tool_path = produce_tool_path(tool_name, target_triple, version)
 
     archive_path = tool_path + _get_tool_extension(ctx)
-    ctx.download(
-        urls,
-        output = archive_path,
-        sha256 = getattr(ctx.attr, "sha256s", dict()).get(archive_path) or
-                 FILE_KEY_TO_SHA.get(archive_path) or
-                 sha256,
-        auth = _make_auth_dict(ctx, urls),
-    )
     for subdirectory in tool_subdirectories:
-        ctx.extract(
-            archive_path,
-            output = "",
+        ctx.download_and_extract(
+            urls,
+            sha256 = getattr(ctx.attr, "sha256s", {}).get(archive_path) or
+                     FILE_KEY_TO_SHA.get(archive_path) or
+                     sha256,
+            auth = _make_auth_dict(ctx, urls),
             stripPrefix = "{}/{}".format(tool_path, subdirectory),
         )
 
@@ -573,10 +564,7 @@ def _make_auth_dict(ctx, urls):
     auth = getattr(ctx.attr, "auth", {})
     if not auth:
         return {}
-    ret = {}
-    for url in urls:
-        ret[url] = auth
-    return ret
+    return {url: auth for url in urls}
 
 def _get_tool_extension(ctx):
     urls = getattr(ctx.attr, "urls", DEFAULT_STATIC_RUST_URL_TEMPLATES)

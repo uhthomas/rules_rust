@@ -1,7 +1,5 @@
 """Utilities directly related to the `splicing` step of `cargo-bazel`."""
 
-load(":common_utils.bzl", "cargo_environ", "execute")
-
 CARGO_BAZEL_DEBUG = "CARGO_BAZEL_DEBUG"
 
 def splicing_config(resolver_version = "1"):
@@ -68,7 +66,7 @@ def compile_splicing_manifest(splicing_config, manifests, cargo_config_path, pac
     return dict(splicing_config.items() + splicing_manifest_content.items())
 
 def create_splicing_manifest(repository_ctx):
-    """Produce a manifest containing required components for splciing a new Cargo workspace
+    """Produce a manifest containing required components for splicing a new Cargo workspace
 
     Args:
         repository_ctx (repository_ctx): The rule's context object.
@@ -87,9 +85,7 @@ def create_splicing_manifest(repository_ctx):
     # Load user configurable splicing settings
     config = json.decode(repository_ctx.attr.splicing_config or splicing_config())
 
-    repo_dir = repository_ctx.path(".")
-
-    splicing_manifest = repository_ctx.path("{}/splicing_manifest.json".format(repo_dir))
+    splicing_manifest = "splicing_manifest.json"
 
     data = compile_splicing_manifest(
         splicing_config = config,
@@ -108,77 +104,3 @@ def create_splicing_manifest(repository_ctx):
     )
 
     return splicing_manifest
-
-def splice_workspace_manifest(repository_ctx, generator, lockfile, splicing_manifest, cargo, rustc):
-    """Splice together a Cargo workspace from various other manifests and package definitions
-
-    Args:
-        repository_ctx (repository_ctx): The rule's context object.
-        generator (path): The `cargo-bazel` binary.
-        lockfile (path): The path to a "lock" file for reproducible `cargo-bazel` renderings.
-        splicing_manifest (path): The path to a splicing manifest.
-        cargo (path): The path to a Cargo binary.
-        rustc (path): The Path to a Rustc binary.
-
-    Returns:
-        path: The path to a Cargo metadata json file found in the spliced workspace root.
-    """
-    repository_ctx.report_progress("Splicing Cargo workspace.")
-    repo_dir = repository_ctx.path(".")
-
-    splicing_output_dir = repository_ctx.path("splicing-output")
-
-    # Generate a workspace root which contains all workspace members
-    arguments = [
-        generator,
-        "splice",
-        "--output-dir",
-        splicing_output_dir,
-        "--splicing-manifest",
-        splicing_manifest,
-        "--cargo",
-        cargo,
-        "--rustc",
-        rustc,
-    ]
-
-    # Optionally set the splicing workspace directory to somewhere within the repository directory
-    # to improve the debugging experience.
-    if CARGO_BAZEL_DEBUG in repository_ctx.os.environ:
-        arguments.extend([
-            "--workspace-dir",
-            repository_ctx.path("{}/splicing-workspace".format(repo_dir)),
-        ])
-
-    # Splicing accepts a Cargo.lock file in some scenarios. Ensure it's passed
-    # if the lockfile is a actually a Cargo lockfile.
-    if lockfile.kind == "cargo":
-        arguments.extend([
-            "--cargo-lockfile",
-            lockfile.path,
-        ])
-
-    env = {
-        "CARGO": str(cargo),
-        "RUSTC": str(rustc),
-        "RUST_BACKTRACE": "full",
-    }
-
-    # Add any Cargo environment variables to the `cargo-bazel` execution
-    env.update(cargo_environ(repository_ctx))
-
-    execute(
-        repository_ctx = repository_ctx,
-        args = arguments,
-        env = env,
-    )
-
-    # This file must have been produced by the execution above.
-    spliced_lockfile = repository_ctx.path("{}/Cargo.lock".format(splicing_output_dir))
-    if not spliced_lockfile.exists:
-        fail("Lockfile file does not exist: {}".format(spliced_lockfile))
-    spliced_metadata = repository_ctx.path("{}/metadata.json".format(splicing_output_dir))
-    if not spliced_metadata.exists:
-        fail("Metadata file does not exist: {}".format(spliced_metadata))
-
-    return spliced_metadata

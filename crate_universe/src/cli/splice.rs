@@ -1,5 +1,7 @@
 //! The cli entrypoint for the `splice` subcommand
 
+use std::env;
+use std::fs;
 use std::path::PathBuf;
 
 use anyhow::Context;
@@ -13,6 +15,14 @@ use crate::splicing::{generate_lockfile, Splicer, SplicingManifest, WorkspaceMet
 #[derive(Parser, Debug)]
 #[clap(about, version)]
 pub struct SpliceOptions {
+    /// The path to a Cargo binary to use for gathering metadata
+    #[clap(long, env = "CARGO")]
+    pub cargo: PathBuf,
+
+    /// The path to a rustc binary for use with Cargo
+    #[clap(long, env = "RUSTC")]
+    pub rustc: PathBuf,
+
     /// A generated manifest of splicing inputs
     #[clap(long)]
     pub splicing_manifest: PathBuf,
@@ -38,17 +48,48 @@ pub struct SpliceOptions {
     #[clap(long)]
     pub cargo_config: Option<PathBuf>,
 
-    /// The path to a Cargo binary to use for gathering metadata
-    #[clap(long, env = "CARGO")]
-    pub cargo: PathBuf,
+    /// The output path for the Cargo lockfile.
+    #[clap(long)]
+    pub out_cargo_lockfile: PathBuf,
 
-    /// The path to a rustc binary for use with Cargo
-    #[clap(long, env = "RUSTC")]
-    pub rustc: PathBuf,
+    /// The output path for the metadata.
+    #[clap(long)]
+    pub out_metadata: PathBuf,
+}
+
+impl SpliceOptions {
+    // Canonicalize all option paths.
+    fn canonicalize(self: Self) -> Result<Self> {
+        Ok(Self {
+            cargo: fs::canonicalize(self.cargo)?,
+            rustc: fs::canonicalize(self.rustc)?,
+            splicing_manifest: fs::canonicalize(self.splicing_manifest)?,
+            cargo_lockfile: try_canonicalize(self.cargo_lockfile)?,
+            workspace_dir: try_canonicalize(self.workspace_dir)?,
+            output_dir: fs::canonicalize(self.output_dir)?,
+            cargo_config: try_canonicalize(self.cargo_config)?,
+            // Cannot canonicalize paths which don't exist.
+            // out_cargo_lockfile: fs::canonicalize(self.out_cargo_lockfile)?,
+            // out_metadata: fs::canonicalize(self.out_metadata)?,
+            ..self
+        })
+    }
+}
+
+// Canonicalize the path if some.
+fn try_canonicalize(path: Option<PathBuf>) -> Result<Option<PathBuf>> {
+    Ok(path.and_then(|x| Some(fs::canonicalize(x))).transpose()?)
 }
 
 /// Combine a set of disjoint manifests into a single workspace.
 pub fn splice(opt: SpliceOptions) -> Result<()> {
+    let opt = opt.canonicalize()?;
+
+    // Required for the cargo-metadata crate as there's no way to explicitly
+    // provide the rustc path.
+    env::set_var("CARGO", &opt.cargo);
+    env::set_var("RUSTC", &opt.rustc);
+
     // Load the all config files required for splicing a workspace
     let splicing_manifest = SplicingManifest::try_from_path(&opt.splicing_manifest)?;
 
@@ -98,9 +139,9 @@ pub fn splice(opt: SpliceOptions) -> Result<()> {
     std::fs::create_dir_all(&output_dir)
         .with_context(|| format!("Failed to create directories for {}", &output_dir.display()))?;
 
-    write_metadata(&opt.output_dir.join("metadata.json"), &cargo_metadata)?;
+    write_metadata(&opt.out_metadata, &cargo_metadata)?;
 
-    std::fs::copy(cargo_lockfile_path, output_dir.join("Cargo.lock"))
+    std::fs::copy(cargo_lockfile_path, opt.out_cargo_lockfile)
         .context("Failed to copy lockfile")?;
 
     Ok(())

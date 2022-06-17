@@ -201,7 +201,11 @@ fn get_library_target_name(package: &Package, potential_name: &str) -> String {
     let lib_targets: Vec<&cargo_metadata::Target> = package
         .targets
         .iter()
-        .filter(|t| t.kind.iter().any(|k| k == "lib" || k == "proc-macro"))
+        .filter(|t| {
+            t.kind
+                .iter()
+                .any(|k| k == "lib" || k == "rlib" || k == "proc-macro")
+        })
         .collect();
 
     // Only one target should be found

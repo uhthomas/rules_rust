@@ -4,7 +4,6 @@ mod config;
 mod context;
 mod lockfile;
 mod metadata;
-mod rendering;
 mod splicing;
 mod utils;
 

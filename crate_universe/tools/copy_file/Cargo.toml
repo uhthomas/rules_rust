@@ -1,0 +1,8 @@
+[package]
+name = "copy_file"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "copy_file"
+path = "src/main.rs"

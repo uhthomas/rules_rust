@@ -14,29 +14,6 @@ use semver::VersionReq;
 use serde::de::Visitor;
 use serde::{Deserialize, Serialize, Serializer};
 
-/// Representations of different kinds of crate vendoring into workspaces.
-#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
-#[serde(rename_all = "lowercase")]
-pub enum VendorMode {
-    /// Crates having full source being vendored into a workspace
-    Local,
-
-    /// Crates having only BUILD files with repository rules vendored into a workspace
-    Remote,
-}
-
-impl std::fmt::Display for VendorMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(
-            match self {
-                VendorMode::Local => "local",
-                VendorMode::Remote => "remote",
-            },
-            f,
-        )
-    }
-}
-
 #[derive(Debug, Default, Hash, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct RenderConfig {
@@ -72,9 +49,6 @@ pub struct RenderConfig {
     /// Eg. `@rules_rust//rust/platform:{triple}`.
     #[serde(default = "default_platforms_template")]
     pub platforms_template: String,
-
-    /// An optional configuration for rendirng content to be rendered into repositories.
-    pub vendor_mode: Option<VendorMode>,
 }
 
 fn default_build_file_template() -> String {

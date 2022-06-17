@@ -1,89 +1,10 @@
 """Utilities directly related to the `generate` step of `cargo-bazel`."""
 
-load(":common_utils.bzl", "CARGO_BAZEL_ISOLATED", "cargo_environ", "execute")
+load(":common_utils.bzl", "CARGO_BAZEL_ISOLATED")
 
-CARGO_BAZEL_GENERATOR_SHA256 = "CARGO_BAZEL_GENERATOR_SHA256"
-CARGO_BAZEL_GENERATOR_URL = "CARGO_BAZEL_GENERATOR_URL"
-CARGO_BAZEL_REPIN = "CARGO_BAZEL_REPIN"
-REPIN = "REPIN"
-
-GENERATOR_ENV_VARS = [
-    CARGO_BAZEL_GENERATOR_URL,
-    CARGO_BAZEL_GENERATOR_SHA256,
-]
-
-REPIN_ENV_VARS = [
-    REPIN,
-    CARGO_BAZEL_REPIN,
-]
-
-CRATES_REPOSITORY_ENVIRON = GENERATOR_ENV_VARS + REPIN_ENV_VARS + [
+CRATES_REPOSITORY_ENVIRON = [
     CARGO_BAZEL_ISOLATED,
 ]
-
-def get_generator(repository_ctx, host_triple):
-    """Query network resources to locate a `cargo-bazel` binary
-
-    Args:
-        repository_ctx (repository_ctx): The rule's context object.
-        host_triple (string): A string representing the host triple
-
-    Returns:
-        tuple(path, dict): The path to a `cargo-bazel` binary and the host sha256 pairing.
-            The pairing (dict) may be `None` if there is no need to update the attribute
-    """
-    use_environ = False
-    for var in GENERATOR_ENV_VARS:
-        if var in repository_ctx.os.environ:
-            use_environ = True
-
-    output = repository_ctx.path("cargo-bazel.exe" if "win" in repository_ctx.os.name else "cargo-bazel")
-
-    # The `generator` attribute is the next highest priority behind
-    # environment variables. We check those first before deciding to
-    # use an explicitly provided variable.
-    if not use_environ and repository_ctx.attr.generator:
-        generator = repository_ctx.path(Label(repository_ctx.attr.generator))
-
-        # Resolve a few levels of symlinks to ensure we're accessing the direct binary
-        for _ in range(1, 100):
-            real_generator = generator.realpath
-            if real_generator == generator:
-                break
-            generator = real_generator
-        return generator, None
-
-    # The environment variable will take precedence if set
-    if use_environ:
-        generator_sha256 = repository_ctx.os.environ.get(CARGO_BAZEL_GENERATOR_SHA256)
-        generator_url = repository_ctx.os.environ.get(CARGO_BAZEL_GENERATOR_URL)
-    else:
-        generator_sha256 = repository_ctx.attr.generator_sha256s.get(host_triple)
-        generator_url = repository_ctx.attr.generator_urls.get(host_triple)
-
-    if not generator_url:
-        fail((
-            "No generator URL was found either in the `CARGO_BAZEL_GENERATOR_URL` " +
-            "environment variable or for the `{}` triple in the `generator_urls` attribute"
-        ).format(host_triple))
-
-    # Download the file into place
-    if generator_sha256:
-        repository_ctx.download(
-            output = output,
-            url = generator_url,
-            sha256 = generator_sha256,
-            executable = True,
-        )
-        return output, None
-
-    result = repository_ctx.download(
-        output = output,
-        url = generator_url,
-        executable = True,
-    )
-
-    return output, {host_triple: result.sha256}
 
 def render_config(
         build_file_template = "//:BUILD.{name}-{version}.bazel",
@@ -91,8 +12,7 @@ def render_config(
         crate_repository_template = "{repository}__{name}-{version}",
         crates_module_template = "//:{file}",
         default_package_name = None,
-        platforms_template = "@rules_rust//rust/platform:{triple}",
-        vendor_mode = None):
+        platforms_template = "@rules_rust//rust/platform:{triple}"):
     """Various settings used to configure rendered outputs
 
     The template parameters each support a select number of format keys. A description of each key
@@ -121,7 +41,6 @@ def render_config(
         platforms_template (str, optional): The base template to use for platform names.
             See [platforms documentation](https://docs.bazel.build/versions/main/platforms.html). The available format
             keys are [`{triple}`].
-        vendor_mode (str, optional): An optional configuration for rendirng content to be rendered into repositories.
 
     Returns:
         string: A json encoded struct to match the Rust `config::RenderConfig` struct
@@ -133,7 +52,6 @@ def render_config(
         crates_module_template = crates_module_template,
         default_package_name = default_package_name,
         platforms_template = platforms_template,
-        vendor_mode = vendor_mode,
     ))
 
 def _crate_id(name, version):
@@ -277,7 +195,7 @@ def generate_config(repository_ctx):
         repository_ctx = repository_ctx,
     )
 
-    config_path = repository_ctx.path("cargo-bazel.json")
+    config_path = "cargo-bazel.json"
     repository_ctx.file(
         config_path,
         json.encode_indent(config, indent = " " * 4),
@@ -306,152 +224,3 @@ def get_lockfile(repository_ctx):
         path = repository_ctx.path(repository_ctx.attr.lockfile),
         kind = kind,
     )
-
-def determine_repin(repository_ctx, generator, lockfile_path, lockfile_kind, config, splicing_manifest, cargo, rustc):
-    """Use the `cargo-bazel` binary to determine whether or not dpeendencies need to be re-pinned
-
-    Args:
-        repository_ctx (repository_ctx): The rule's context object.
-        generator (path): The path to a `cargo-bazel` binary.
-        config (path): The path to a `cargo-bazel` config file. See `generate_config`.
-        splicing_manifest (path): The path to a `cargo-bazel` splicing manifest. See `create_splicing_manifest`
-        lockfile_path (path): The path to a "lock" file for reproducible outputs.
-        lockfile_kind (str): The type of lock file represented by `lockfile_path`
-        cargo (path): The path to a Cargo binary.
-        rustc (path): The path to a Rustc binary.
-
-    Returns:
-        bool: True if dependencies need to be re-pinned
-    """
-
-    # If a repin environment variable is set, always repin
-    for var in REPIN_ENV_VARS:
-        if repository_ctx.os.environ.get(var, "").lower() in ["true", "yes", "1", "on"]:
-            return True
-
-    # Cargo lockfiles should always be repinned.
-    if lockfile_kind == "cargo":
-        return True
-
-    # Run the binary to check if a repin is needed
-    args = [
-        generator,
-        "query",
-        "--lockfile",
-        lockfile_path,
-        "--config",
-        config,
-        "--splicing-manifest",
-        splicing_manifest,
-        "--cargo",
-        cargo,
-        "--rustc",
-        rustc,
-    ]
-
-    env = {
-        "CARGO": str(cargo),
-        "RUSTC": str(rustc),
-        "RUST_BACKTRACE": "full",
-    }
-
-    # Add any Cargo environment variables to the `cargo-bazel` execution
-    env.update(cargo_environ(repository_ctx))
-
-    result = execute(
-        repository_ctx = repository_ctx,
-        args = args,
-        env = env,
-    )
-
-    # If it was determined repinning should occur but there was no
-    # flag indicating repinning was requested, an error is raised
-    # since repinning should be an explicit action
-    if result.stdout.strip().lower() == "repin":
-        # buildifier: disable=print
-        print(result.stderr)
-        fail((
-            "The current `lockfile` is out of date for '{}'. Please re-run " +
-            "bazel using `CARGO_BAZEL_REPIN=true` if this is expected " +
-            "and the lockfile should be updated."
-        ).format(repository_ctx.name))
-
-    return False
-
-def execute_generator(
-        repository_ctx,
-        lockfile_path,
-        lockfile_kind,
-        generator,
-        config,
-        splicing_manifest,
-        repository_dir,
-        cargo,
-        rustc,
-        repin = False,
-        metadata = None):
-    """Execute the `cargo-bazel` binary to produce `BUILD` and `.bzl` files.
-
-    Args:
-        repository_ctx (repository_ctx): The rule's context object.
-        lockfile_path (path): The path to a "lock" file (file used for reproducible renderings).
-        lockfile_kind (str): The type of lockfile given (Cargo or Bazel).
-        generator (path): The path to a `cargo-bazel` binary.
-        config (path): The path to a `cargo-bazel` config file.
-        splicing_manifest (path): The path to a `cargo-bazel` splicing manifest. See `create_splicing_manifest`
-        repository_dir (path): The output path for the Bazel module and BUILD files.
-        cargo (path): The path of a Cargo binary.
-        rustc (path): The path of a Rustc binary.
-        repin (bool, optional): Whether or not to repin dependencies
-        metadata (path, optional): The path to a Cargo metadata json file.
-
-    Returns:
-        struct: The results of `repository_ctx.execute`.
-    """
-    repository_ctx.report_progress("Generating crate BUILD files.")
-
-    args = [
-        generator,
-        "generate",
-        "--lockfile",
-        lockfile_path,
-        "--lockfile-kind",
-        lockfile_kind,
-        "--config",
-        config,
-        "--splicing-manifest",
-        splicing_manifest,
-        "--repository-dir",
-        repository_dir,
-        "--cargo",
-        cargo,
-        "--rustc",
-        rustc,
-    ]
-
-    env = {
-        "RUST_BACKTRACE": "full",
-    }
-
-    # Some components are not required unless re-pinning is enabled
-    if repin:
-        args.extend([
-            "--repin",
-            "--metadata",
-            metadata,
-        ])
-        env.update({
-            "CARGO": str(cargo),
-            "RUSTC": str(rustc),
-        })
-
-    # Add any Cargo environment variables to the `cargo-bazel` execution
-    env.update(cargo_environ(repository_ctx))
-
-    result = execute(
-        repository_ctx = repository_ctx,
-        args = args,
-        env = env,
-    )
-
-    return result

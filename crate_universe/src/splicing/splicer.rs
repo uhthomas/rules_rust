@@ -8,7 +8,6 @@ use anyhow::{bail, Context, Result};
 use cargo_toml::{Dependency, Manifest};
 use normpath::PathExt;
 
-use crate::config::CrateId;
 use crate::splicing::{SplicedManifest, SplicingManifest};
 use crate::utils::starlark::Label;
 
@@ -500,12 +499,6 @@ pub fn default_cargo_package_manifest() -> cargo_toml::Manifest {
     manifest
 }
 
-pub fn default_splicing_package_crate_id() -> CrateId {
-    CrateId::new(
-        DEFAULT_SPLICING_PACKAGE_NAME.to_string(),
-        DEFAULT_SPLICING_PACKAGE_VERSION.to_string(),
-    )
-}
 
 pub fn default_cargo_workspace_manifest(
     resolver_version: &cargo_toml::Resolver,

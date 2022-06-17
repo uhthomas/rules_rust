@@ -48,6 +48,12 @@ pub enum Rule {
     /// `rust_library`
     Library(TargetAttributes),
 
+    /// `rust_shared_library`
+    SharedLibrary(TargetAttributes),
+
+    /// `rust_static_library`
+    StaticLibrary(TargetAttributes),
+
     /// `rust_binary`
     Binary(TargetAttributes),
 }
@@ -591,34 +597,34 @@ impl CrateContext {
                             }));
                         }
 
-                        // Check to see if the dependencies is a proc-macro target
-                        if kind == "proc-macro" {
-                            return Some(Rule::ProcMacro(TargetAttributes {
-                                crate_name,
-                                crate_root,
-                                srcs: Glob::new_rust_srcs(),
-                            }));
-                        }
-
-                        // Check to see if the dependencies is a library target
-                        if ["lib", "rlib"].contains(&kind.as_str()) {
-                            return Some(Rule::Library(TargetAttributes {
-                                crate_name,
-                                crate_root,
-                                srcs: Glob::new_rust_srcs(),
-                            }));
-                        }
-
-                        // Check to see if the dependencies is a library target
-                        if kind == "bin" {
-                            return Some(Rule::Binary(TargetAttributes {
+                        match kind.as_str() {
+                            "bin" => Some(Rule::Binary(TargetAttributes {
                                 crate_name: target.name.clone(),
                                 crate_root,
                                 srcs: Glob::new_rust_srcs(),
-                            }));
+                            })),
+                            "proc-macro" => Some(Rule::ProcMacro(TargetAttributes {
+                                crate_name,
+                                crate_root,
+                                srcs: Glob::new_rust_srcs(),
+                            })),
+                            "lib" | "rlib" => Some(Rule::Library(TargetAttributes {
+                                crate_name,
+                                crate_root,
+                                srcs: Glob::new_rust_srcs(),
+                            })),
+                            "cdylib" => Some(Rule::SharedLibrary(TargetAttributes {
+                                crate_name,
+                                crate_root,
+                                srcs: Glob::new_rust_srcs(),
+                            })),
+                            "staticlib" => Some(Rule::StaticLibrary(TargetAttributes {
+                                crate_name,
+                                crate_root,
+                                srcs: Glob::new_rust_srcs(),
+                            })),
+                            _ => None,
                         }
-
-                        None
                     })
                     .collect::<Vec<Rule>>()
             })

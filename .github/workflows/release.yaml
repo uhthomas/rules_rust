@@ -114,15 +114,12 @@ jobs:
           echo "RELEASE_VERSION=${version}" >> $GITHUB_ENV
       - name: Create the rules archive
         run: |
-          # Update urls and sha256 values
-          bazel ${BAZEL_STARTUP_FLAGS[@]}  run //crate_universe/tools/urls_generator -- --artifacts-dir="${ARTIFACTS_DIR}" --url-prefix="${URL_PREFIX}"
           # Publish to a known location
           bazel ${BAZEL_STARTUP_FLAGS[@]}  run //distro:publish -- ${{ github.workspace }}/.github
           # Save the sha256 checksum of the distro archive to the environment
           sha256="$(shasum --algorithm 256 ${{ github.workspace }}/.github/rules_rust.tar.gz | awk '{ print $1 }')"
           echo "ARCHIVE_SHA256=${sha256}" >> $GITHUB_ENV
         env:
-          CARGO_BAZEL_GENERATOR_URL: file://${{ github.workspace }}/crate_universe/target/artifacts/x86_64-unknown-linux-gnu/cargo-bazel
           ARTIFACTS_DIR: ${{ github.workspace }}/crate_universe/target/artifacts
           URL_PREFIX: https://github.com/${{ github.repository_owner }}/rules_rust/releases/download/${{ env.RELEASE_VERSION }}
       # Upload the artifact in case creating a release fails so all artifacts can then be manually recovered.

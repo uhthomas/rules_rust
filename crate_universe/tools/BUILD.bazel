@@ -3,7 +3,6 @@ filegroup(
     srcs = [
         "BUILD.bazel",
         "//crate_universe/tools/cross_installer:distro",
-        "//crate_universe/tools/urls_generator:distro",
     ],
     visibility = ["//crate_universe:__subpackages__"],
 )

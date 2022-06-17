@@ -1,0 +1,12 @@
+load("@crate_universe_crate_index//:defs.bzl", "aliases", "all_crate_deps")
+load("//rust:defs.bzl", "rust_binary")
+
+rust_binary(
+    name = "copy_file",
+    srcs = ["src/main.rs"],
+    aliases = aliases(),
+    edition = "2021",
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    visibility = ["//visibility:public"],
+    deps = all_crate_deps(normal = True),
+)

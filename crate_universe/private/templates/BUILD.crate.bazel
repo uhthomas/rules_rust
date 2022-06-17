@@ -1,0 +1,11 @@
+# TODO: The "rules_rust" part needs to be templated.
+load("@rules_rust//crate_universe/private:crate_targets.bzl", "declare_crate_targets")
+load("@{crate_index}//:manifest.bzl", "MANIFEST")
+
+declare_crate_targets(
+    crate_index = "@{crate_index}",
+    crate_name = "{crate_name}",
+    manifest = MANIFEST,
+)
+
+# Additive build file content:{additive_build_file_content}

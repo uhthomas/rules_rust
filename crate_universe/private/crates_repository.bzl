@@ -1,104 +1,63 @@
 """`crates_repository` rule implementation"""
 
-load("//crate_universe/private:common_utils.bzl", "get_rust_tools")
-load(
-    "//crate_universe/private:generate_utils.bzl",
-    "CRATES_REPOSITORY_ENVIRON",
-    "determine_repin",
-    "execute_generator",
-    "generate_config",
-    "get_generator",
-    "get_lockfile",
-)
-load(
-    "//crate_universe/private:splicing_utils.bzl",
-    "create_splicing_manifest",
-    "splice_workspace_manifest",
-)
-load("//crate_universe/private:urls.bzl", "CARGO_BAZEL_SHA256S", "CARGO_BAZEL_URLS")
+load("//crate_universe/private:format.bzl", "format_build_file_name")
+load("//crate_universe/private:generate_utils.bzl", "CRATES_REPOSITORY_ENVIRON", "generate_config", "get_lockfile")
+load("//crate_universe/private:splicing_utils.bzl", "create_splicing_manifest")
 load("//rust:defs.bzl", "rust_common")
-load("//rust/platform:triple.bzl", "get_host_triple")
 load("//rust/platform:triple_mappings.bzl", "SUPPORTED_PLATFORM_TRIPLES")
 
-def _crates_repository_impl(repository_ctx):
-    # Determine the current host's platform triple
-    host_triple = get_host_triple(repository_ctx)
+def read_manifest(ctx):
+    content = ctx.read(ctx.attr.lockfile)
+    if not content:
+        return {}
+    return json.decode(content)
 
-    # Locate the generator to use
-    generator, generator_sha256 = get_generator(repository_ctx, host_triple.str)
+def _crates_repository_impl(ctx):
+    config = generate_config(ctx)
 
-    # Generate a config file for all settings
-    config_path = generate_config(repository_ctx)
+    # TODO: Maybe do this with build rules?
+    splicing_manifest = create_splicing_manifest(ctx)
 
-    # Locate the lockfile
-    lockfile = get_lockfile(repository_ctx)
+    lockfile = get_lockfile(ctx)
 
-    # Locate Rust tools (cargo, rustc)
-    tools = get_rust_tools(repository_ctx, host_triple)
-    cargo_path = repository_ctx.path(tools.cargo)
-    rustc_path = repository_ctx.path(tools.rustc)
+    if lockfile.kind != "bazel":
+        # TODO: How should a cargo.toml be handled? Probably not at all?
+        fail("unsupported lockfile kind")
 
-    # Create a manifest of all dependency inputs
-    splicing_manifest = create_splicing_manifest(repository_ctx)
+    manifest = read_manifest(ctx)
 
-    # Determine whether or not to repin depednencies
-    repin = determine_repin(
-        repository_ctx = repository_ctx,
-        generator = generator,
-        lockfile_path = lockfile.path,
-        lockfile_kind = lockfile.kind,
-        config = config_path,
-        splicing_manifest = splicing_manifest,
-        cargo = cargo_path,
-        rustc = rustc_path,
-    )
-
-    # If re-pinning is enabled, gather additional inputs for the generator
-    kwargs = dict()
-    if repin or lockfile.kind == "cargo":
-        # Generate a top level Cargo workspace and manifest for use in generation
-        metadata_path = splice_workspace_manifest(
-            repository_ctx = repository_ctx,
-            generator = generator,
-            lockfile = lockfile,
-            splicing_manifest = splicing_manifest,
-            cargo = cargo_path,
-            rustc = rustc_path,
+    # TODO: Maybe it's not necessary to generate a whole build file per crate?
+    # It could just be one build file with a macro.
+    for (crate_name, crate) in manifest.get("crates", {}).items():
+        ctx.template(
+            format_build_file_name(
+                crate.get("name"),
+                crate.get("version"),
+            ),
+            ctx.attr._crate_build_template,
+            substitutions = {
+                "{crate_index}": ctx.name,
+                "{crate_name}": crate_name,
+                "{additive_build_file_content}": "\n" + crate.get("additive_build_file_content", ""),
+            },
+            executable = False,
         )
 
-        kwargs.update({
-            "metadata": metadata_path,
-            "repin": True,
-        })
-
-    # Run the generator
-    execute_generator(
-        repository_ctx = repository_ctx,
-        generator = generator,
-        config = config_path,
-        splicing_manifest = splicing_manifest,
-        lockfile_path = lockfile.path,
-        lockfile_kind = lockfile.kind,
-        repository_dir = repository_ctx.path("."),
-        cargo = cargo_path,
-        rustc = rustc_path,
-        # sysroot = tools.sysroot,
-        **kwargs
+    ctx.template(
+        "manifest.bzl",
+        ctx.attr._manifest_template,
+        substitutions = {
+            "{crate_index}": ctx.name,
+            "{config}": config,
+            "{lockfile_path}": str(lockfile.path),
+            "{manifest}": repr(manifest),
+            "{splicing_manifest}": splicing_manifest,
+        },
+        executable = False,
     )
 
-    # Determine the set of reproducible values
-    attrs = {attr: getattr(repository_ctx.attr, attr) for attr in dir(repository_ctx.attr)}
-    exclude = ["to_json", "to_proto"]
-    for attr in exclude:
-        attrs.pop(attr, None)
-
-    # Note that this is only scoped to the current host platform. Users should
-    # ensure they provide all the values necessary for the host environments
-    # they support
-    if generator_sha256:
-        attrs.update({"generator_sha256s": generator_sha256})
-
-    return attrs
+    ctx.symlink(ctx.attr._build_template, "BUILD.bazel")
+    ctx.symlink(ctx.attr._defs_template, "defs.bzl")
 
 crates_repository = repository_rule(
     doc = """\
@@ -188,17 +147,6 @@ CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
                 "This is typically used when bootstrapping"
             ),
         ),
-        "generator_sha256s": attr.string_dict(
-            doc = "Dictionary of `host_triple` -> `sha256` for a `cargo-bazel` binary.",
-            default = CARGO_BAZEL_SHA256S,
-        ),
-        "generator_urls": attr.string_dict(
-            doc = (
-                "URL template from which to download the `cargo-bazel` binary. `{host_triple}` and will be " +
-                "filled in according to the host platform."
-            ),
-            default = CARGO_BAZEL_URLS,
-        ),
         "isolated": attr.bool(
             doc = (
                 "If true, `CARGO_HOME` will be overwritten to a directory within the generated repository in " +
@@ -280,6 +228,22 @@ CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
         "supported_platform_triples": attr.string_list(
             doc = "A set of all platform triples to consider when generating dependencies.",
             default = SUPPORTED_PLATFORM_TRIPLES,
+        ),
+        "_crate_build_template": attr.label(
+            allow_single_file = True,
+            default = "templates/BUILD.crate.bazel",
+        ),
+        "_build_template": attr.label(
+            allow_single_file = True,
+            default = "templates/BUILD.crates_repository.bazel",
+        ),
+        "_defs_template": attr.label(
+            allow_single_file = True,
+            default = "templates/defs.crates_repository.bzl",
+        ),
+        "_manifest_template": attr.label(
+            allow_single_file = True,
+            default = "templates/manifest.crates_repository.bzl",
         ),
     },
     environ = CRATES_REPOSITORY_ENVIRON,

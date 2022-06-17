@@ -189,7 +189,7 @@ load(
     _crate_universe_dependencies = "crate_universe_dependencies",
 )
 load(
-    "//crate_universe/3rdparty/crates:defs.bzl",
+    "@crate_universe_crate_index//:defs.bzl",
     _aliases = "aliases",
     _all_crate_deps = "all_crate_deps",
     _crate_deps = "crate_deps",

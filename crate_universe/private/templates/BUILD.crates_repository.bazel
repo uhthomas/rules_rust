@@ -1,0 +1,28 @@
+# TODO: The "rules_rust" part needs to be templated.
+load("@rules_rust//crate_universe/private:cargo_bazel.bzl", "generate", "splice")
+load("@rules_rust//crate_universe/private:crate_index.bzl", "workspace_members")
+load("@rules_rust//crate_universe/tools:defs.bzl", "copy_file")
+load("//:manifest.bzl", "CONFIG", "LOCKFILE_PATH", "MANIFEST", "SPLICING_MANIFEST")
+
+workspace_members(
+    crate_index = repository_name(),
+    manifest = MANIFEST,
+)
+
+splice(
+    name = "metadata",
+    splicing_manifest = SPLICING_MANIFEST,
+)
+
+generate(
+    name = "lockfile",
+    config = CONFIG,
+    metadata = ":metadata",
+    splicing_manifest = SPLICING_MANIFEST,
+)
+
+copy_file(
+    name = "repin",
+    src = ":lockfile",
+    dst = LOCKFILE_PATH,
+)

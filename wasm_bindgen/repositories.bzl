@@ -15,7 +15,7 @@
 # buildifier: disable=module-docstring
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
-load("//wasm_bindgen/3rdparty/crates:defs.bzl", "crate_repositories")
+load("//crate_universe:defs.bzl", "crate", "crates_repository")
 
 WASM_BINDGEN_VERSION = "0.2.78"
 
@@ -43,7 +43,56 @@ def rust_wasm_bindgen_dependencies():
         urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/5.4.2/rules_nodejs-core-5.4.2.tar.gz"],
     )
 
-    crate_repositories()
+    crates_repository(
+        name = "rules_rust_wasm_bindgen_crate_index",
+        annotations = {
+            "curl-sys": [crate.annotation(
+                gen_build_script = False,
+            )],
+            "log": [crate.annotation(
+                rustc_flags = [
+                    "--cfg=atomic_cas",
+                    "--cfg=use_std",
+                ],
+                version = "<5",
+            )],
+            "openssl-sys": [crate.annotation(
+                gen_build_script = False,
+                rustc_flags = [
+                    # Vendored openssl is 1.0.2m
+                    "--cfg=ossl101",
+                    "--cfg=ossl102",
+                    "--cfg=ossl102f",
+                    "--cfg=ossl102h",
+                    "--cfg=ossl110",
+                    "--cfg=ossl110f",
+                    "--cfg=ossl110g",
+                    "--cfg=ossl111",
+                    "--cfg=ossl111b",
+                    "-l",
+                    "dylib=ssl",
+                    "-l",
+                    "dylib=crypto",
+                ],
+            )],
+            "proc-macro2": [crate.annotation(
+                rustc_flags = ["--cfg=use_proc_macro"],
+            )],
+            "unicase": [crate.annotation(
+                rustc_flags = [
+                    "--cfg=__unicase__iter_cmp",
+                    "--cfg=__unicase__defauler_hasher",
+                ],
+            )],
+        },
+        manifests = ["@rules_rust_wasm_bindgen_cli//:Cargo.toml"],
+        packages = {
+            "wasm-bindgen": crate.spec(
+                version = WASM_BINDGEN_VERSION,
+            ),
+        },
+        lockfile = "@rules_rust//wasm_bindgen:Cargo.Bazel.lock",
+    )
 
 # buildifier: disable=unnamed-macro
 def rust_wasm_bindgen_register_toolchains(register_toolchains = True):

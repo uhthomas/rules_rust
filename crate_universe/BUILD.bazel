@@ -16,8 +16,11 @@ exports_files(
 
 filegroup(
     name = "distro",
-    srcs = glob(["*.bzl"]) + [
-        ":rust_srcs",
+    srcs = glob([
+        "src/**/*.rs",
+        "src/**/*.j2",
+        "*.bzl",
+    ]) + [
         "//crate_universe/3rdparty:distro",
         "//crate_universe/private:distro",
         "//crate_universe/tools:distro",
@@ -45,15 +48,6 @@ bzl_library(
     srcs = [":bzl_srcs"],
     visibility = ["//visibility:public"],
     deps = ["//rust:bzl_lib"],
-)
-
-filegroup(
-    name = "rust_srcs",
-    srcs = glob([
-        "src/**/*.rs",
-        "src/**/*.j2",
-    ]),
-    visibility = ["//:__subpackages__"],
 )
 
 rust_library(
@@ -102,8 +96,8 @@ rust_test(
         proc_macro_dev = True,
     ),
     rustc_env = {
-        "CARGO": "$(rootpath @rules_rust//rust/toolchain:current_cargo_files)",
-        "RUSTC": "$(rootpath @rules_rust//rust/toolchain:current_rustc_files)",
+        "CARGO": "$(CARGO)",
+        "RUSTC": "$(RUSTC)",
     },
     deps = [
         "@rules_rust//tools/runfiles",

@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "tools/cross_installer",
-    "tools/urls_generator",
+    "tools/copy_file",
 ]
 
 [package]

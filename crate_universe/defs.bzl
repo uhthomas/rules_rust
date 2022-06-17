@@ -9,10 +9,6 @@ load(
     _crates_repository = "crates_repository",
 )
 load(
-    "//crate_universe/private:crates_vendor.bzl",
-    _crates_vendor = "crates_vendor",
-)
-load(
     "//crate_universe/private:generate_utils.bzl",
     _render_config = "render_config",
 )
@@ -23,7 +19,6 @@ load(
 
 # Rules
 crates_repository = _crates_repository
-crates_vendor = _crates_vendor
 
 # Utility Macros
 crate = _crate
